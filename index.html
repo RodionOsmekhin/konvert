@@ -212,7 +212,7 @@ header p { margin: 2px 0 0; color: var(--muted); font-size: 14px; max-width: 46c
 #frame-text { width: 100%; min-height: 64px; font: inherit; font-size: 15px; color: var(--ink); background: var(--night-2); border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; resize: vertical; }
 #frame-text:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-soft); }
 .textbox .count { font-size: 12px; color: var(--muted); text-align: right; }
-#env-text { font-family: "Harry P", "Philosopher", "Georgia", serif; }
+#env-text { font-family: "Harry P", "Philosopher", "Georgia", serif; white-space: pre; }
 
 @media (min-width: 900px) {
   .wrap { padding-block: 40px 56px; }
@@ -324,7 +324,7 @@ h1.eyebrow { font-family: var(--body); font-weight: 600; font-size: 11px; line-h
             <g clip-path="url(#c-panel)"><use href="#sheet"></use></g>
             <image id="front-art" href="" x="118" y="364" width="705" height="492" preserveAspectRatio="xMidYMid meet"></image>
             <rect id="front-frame" fill="none" stroke="#231a12" stroke-width="2.2" width="0" height="0"></rect>
-            <text id="env-text" fill="#231a12" text-anchor="middle"></text>
+            <text id="env-text" fill="#231a12" text-anchor="middle" xml:space="preserve"></text>
           </svg>
           <svg class="face face-back" id="env-back" viewBox="112 358 717 504" role="img" aria-label="Зворотний бік конверта">
             <g clip-path="url(#c-panel)"><use href="#sheet"></use></g>
@@ -357,8 +357,8 @@ h1.eyebrow { font-family: var(--body); font-weight: 600; font-size: 11px; line-h
         <div class="options" id="options" role="radiogroup" aria-label="Малюнок"></div>
         <div class="textbox">
           <label for="frame-text">Текст у рамці <small>необов'язково</small></label>
-          <textarea id="frame-text" rows="2" maxlength="80" placeholder="Наприклад: Для Марічки з Гоґвортсу"></textarea>
-          <div class="count"><span id="text-count">0</span>/80</div>
+          <textarea id="frame-text" rows="2" maxlength="50" placeholder="Наприклад: Для Марічки з Гоґвортсу"></textarea>
+          <div class="count"><span id="text-count">0</span>/50</div>
         </div>
         <button class="next" type="button" id="to-flap">Далі: зворотний бік</button>
       </div>
@@ -478,30 +478,31 @@ const LINE_H = 1.1;
 const measureCtx = document.createElement('canvas').getContext('2d');
 // Wrap the text into lines and pick the largest font size that fits the box.
 function layoutText(text, box) {
-  text = (text || '').trim();
-  if (!text || !box) return null;
-  const paras = text.split(/\n+/).map(t => t.trim()).filter(Boolean);
+  // Spaces are kept on purpose: leading spaces shift a line to the right, an empty first line moves the text down.
+  text = (text || '').replace(/\t/g, ' ').replace(/\s+$/, '');
+  if (!text.trim() || !box) return null;
+  const paras = text.split('\n');
   let size = Math.min(box.h / 1.5, box.w / 3.5);
   for (; size >= 6; size -= 0.5) {
     measureCtx.font = TEXT_WEIGHT + ' ' + size + 'px ' + TEXT_FONT;
     const lines = [];
     let ok = true;
     for (const para of paras) {
-      let line = '';
-      for (const word of para.split(/\s+/)) {
-        const t = line ? line + ' ' + word : word;
+      let line = null;
+      for (const word of para.split(' ')) {
+        const t = line === null ? word : line + ' ' + word;
         if (measureCtx.measureText(t).width <= box.w) line = t;
         else {
           // don't leave a short word (з, і, в, на...) hanging at the end of a line
-          const m = line.match(/^(.*\S)\s+(\S{1,2})$/);
+          const m = line !== null && line.match(/^(.*\S)\s+(\S{1,2})$/);
           if (m && measureCtx.measureText(m[2] + ' ' + word).width <= box.w) { lines.push(m[1]); line = m[2] + ' ' + word; continue; }
-          if (line) lines.push(line);
+          if (line !== null && line.trim()) lines.push(line);
           line = word;
           if (measureCtx.measureText(word).width > box.w) { ok = false; break; }
         }
       }
       if (!ok) break;
-      lines.push(line);
+      lines.push(line === null ? '' : line);
     }
     if (ok && lines.length * size * LINE_H <= box.h) return { size, lines };
   }
@@ -681,7 +682,7 @@ const copyText = document.getElementById('copy-text');
 function choiceText() {
   return 'Малюнок: ' + document.getElementById('cur-design').textContent + '\n' +
          'Клапан: ' + document.getElementById('cur-flap').textContent +
-         (state.text.trim() ? '\nТекст у рамці: ' + state.text.trim().replace(/\s+/g, ' ') : '');
+         (state.text.trim() ? '\nТекст у рамці: «' + state.text.replace(/\s+$/, '').replace(/\n/g, ' / ') + '»' : '');
 }
 let copyTimer;
 function copied(msg) {
@@ -832,6 +833,7 @@ if (!FLAPS.some(f => f.id === state.flap)) state.flap = state.flap === 'moon' ? 
 document.getElementById('design-' + state.design).checked = true;
 document.getElementById('flap-' + state.flap).checked = true;
 if (typeof state.text !== 'string') state.text = '';
+state.text = state.text.slice(0, 50);
 textInput.value = state.text;
 updateTextUi();
 render();
